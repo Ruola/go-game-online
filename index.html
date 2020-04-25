@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+    <meta charset="UFT-8">
+    <meta author="renee">
+    <link rel="icon" href="img/sun.webp">
+    <title>Online Go Game</title>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <style>
+        table.chess_board {
+            position: relative;
+            
+            border-collapse: collapse;
+            empty-cells: show;
+        }
+
+        table,
+        td,
+        th {
+            border: 1px solid black;
+        }
+    </style>
+</head>
+
+<body>
+    <p>This a free online go game.</p>
+    <label for="size">Choose a board size:</label>
+    <select id="size" name="size_board">
+        <option value="5">5</option>
+        <option value="13">13</option>
+        <option value="19">19</option>
+    </select>
+    <label for="type">Choose a board size:</label>
+    <select id="type" name="num_player">
+        <option value="2">2 Players</option>
+        <option value="1">1 Player</option>
+    </select>
+    <button type="button" onclick="draw_board()">Start!</button>
+
+    <table id="board_table" onclick="showCoords(event)" class="chess_board" width="50%"></table>
+    <p id="demo"></p>
+    <script>
+        var board_width = document.getElementById("board_table").offsetWidth;
+        var cell_width;
+        var board_size;
+        var num_player;
+        var board_position;
+        function draw_board() {
+            board_size = document.getElementById("size").value;
+            cell_width = Math.floor(board_width / (board_size - 1));
+            board_width = cell_width * (board_size - 1);
+            document.getElementById("board_table").width = board_width + "px";
+            num_player = document.getElementById("type").value;
+            var board = document.getElementById("board_table");
+            for (var i = 0; i < board_size - 1; i++) {   // it has (board_size - 1) cells
+                var row = board.insertRow(i);
+                for (var j = 0; j < board_size - 1; j++) {
+                    var cell = row.insertCell(j);
+                    cell.height = cell_width - 2;
+                }
+            }
+            board_position = $("table").position();
+        }
+    </script>
+    <div id="stone"></div>
+    <script>
+        function showCoords(event) {
+            var x_click = event.clientX;
+            var y_click = event.clientY;
+            // in order to modify the position of stone into the exact cross
+            var x_temp = board_position.left + Math.floor((x_click - board_position.left) / cell_width) * cell_width; // lower bound
+            var y_temp = board_position.top + Math.floor((y_click - board_position.top) / cell_width) * cell_width;
+            var x_click_modify;
+            var pixel_tolerant = Math.min(30, cell_width / 4);
+            if (Math.abs(x_click - x_temp) < pixel_tolerant) {
+                x_click_modify = x_temp;
+            }
+            else if (Math.abs(x_click - x_temp - cell_width) < pixel_tolerant) {
+                x_click_modify = x_temp + cell_width;
+            }
+            var y_click_modify;
+            if (Math.abs(y_click - y_temp) < pixel_tolerant) {
+                y_click_modify = y_temp;
+            }
+            else if (Math.abs(y_click - y_temp - cell_width) < pixel_tolerant) {
+                y_click_modify = y_temp + cell_width;
+            }
+            if (x_click_modify == undefined || y_click_modify == undefined) {
+                // invalid, since the click position is far from cross of the board
+                return;
+            }
+            var stone_diameter = (board_width - board_position.left) / (board_size - 1) * 0.8; // stones fill only 80% of each cell
+            var d = document.getElementById("stone");
+            d.style.position = "absolute";
+            d.style.left = x_click_modify - stone_diameter / 2 + "px";
+            d.style.top = y_click_modify - stone_diameter / 2 + "px";
+            d.style.width = stone_diameter + "px";
+            d.style.height = stone_diameter + "px";
+            d.style.borderRadius = stone_diameter / 2 + "px";
+            d.style.border = "1px solid black";
+            d.style.background = "#000";
+        }
+    </script>
+</body>
+
+</html>
