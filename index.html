@@ -7,20 +7,6 @@
     <link rel="icon" href="img/sun.webp">
     <title>Online Go Game</title>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
-    <style>
-        table.chess_board {
-            position: relative;
-            
-            border-collapse: collapse;
-            empty-cells: show;
-        }
-
-        table,
-        td,
-        th {
-            border: 1px solid black;
-        }
-    </style>
 </head>
 
 <body>
@@ -37,40 +23,46 @@
         <option value="1">1 Player</option>
     </select>
     <button type="button" onclick="draw_board()">Start!</button>
-
-    <table id="board_table" onclick="showCoords(event)" class="chess_board" width="50%"></table>
-    <p id="demo"></p>
+    <canvas id="board_canvas" width="500" , height="500" style="border:1px solid" onclick="showCoords(event)"></canvas>
     <script>
-        var board_width = document.getElementById("board_table").offsetWidth;
+        var canvas_width = document.getElementById("board_canvas").width;
         var cell_width;
         var board_size;
         var num_player;
-        var board_position;
+        var board_top_left_position;
+        var board_array = [];   // store stones on board
         function draw_board() {
-            board_size = document.getElementById("size").value;
-            cell_width = Math.floor(board_width / (board_size - 1));
-            board_width = cell_width * (board_size - 1);
-            document.getElementById("board_table").width = board_width + "px";
-            num_player = document.getElementById("type").value;
-            var board = document.getElementById("board_table");
+            board_size = parseInt(document.getElementById("size").value);
+            num_player = parseInt(document.getElementById("type").value);
+            cell_width = Math.floor(canvas_width / (board_size + 1));
+            var board = document.getElementById("board_canvas").getContext("2d");
             for (var i = 0; i < board_size - 1; i++) {   // it has (board_size - 1) cells
-                var row = board.insertRow(i);
                 for (var j = 0; j < board_size - 1; j++) {
-                    var cell = row.insertCell(j);
-                    cell.height = cell_width - 2;
+                    var x = (1 + i) * cell_width;
+                    var y = (1 + j) * cell_width;
+                    board.beginPath();
+                    board.lineWidth = "1";
+                    board.strokeStyle = "black";
+                    board.rect(x, y, cell_width, cell_width);
+                    board.stroke();
                 }
             }
-            board_position = $("table").position();
+            // pre-process
+            board_top_left_position = $("canvas").position();
+            for (var i = 0; i < board_size; i++) {
+                board_array[i] = new Array(board_size).fill("0");
+            }
         }
     </script>
-    <div id="stone"></div>
     <script>
+        var stone_set = new Set();
+        var stone_color = "black";
         function showCoords(event) {
-            var x_click = event.clientX;
-            var y_click = event.clientY;
+            var x_click = event.clientX - board_top_left_position.left;
+            var y_click = event.clientY - board_top_left_position.top;
             // in order to modify the position of stone into the exact cross
-            var x_temp = board_position.left + Math.floor((x_click - board_position.left) / cell_width) * cell_width; // lower bound
-            var y_temp = board_position.top + Math.floor((y_click - board_position.top) / cell_width) * cell_width;
+            var x_temp = Math.floor(x_click / (cell_width)) * (cell_width); // lower bound
+            var y_temp = Math.floor(y_click / (cell_width)) * (cell_width)
             var x_click_modify;
             var pixel_tolerant = Math.min(30, cell_width / 4);
             if (Math.abs(x_click - x_temp) < pixel_tolerant) {
@@ -86,20 +78,57 @@
             else if (Math.abs(y_click - y_temp - cell_width) < pixel_tolerant) {
                 y_click_modify = y_temp + cell_width;
             }
-            if (x_click_modify == undefined || y_click_modify == undefined) {
-                // invalid, since the click position is far from cross of the board
+            if (x_click_modify == undefined || y_click_modify == undefined
+                || Math.abs(x_click_modify) < cell_width / 2
+                || Math.abs(x_click_modify - (board_size + 1) * cell_width) < cell_width / 2
+                || Math.abs(y_click_modify) < cell_width / 2
+                || Math.abs(y_click_modify - (board_size + 1) * cell_width) < cell_width / 2) {
+                // check whether it is a valid stone position
                 return;
             }
-            var stone_diameter = (board_width - board_position.left) / (board_size - 1) * 0.8; // stones fill only 80% of each cell
-            var d = document.getElementById("stone");
-            d.style.position = "absolute";
-            d.style.left = x_click_modify - stone_diameter / 2 + "px";
-            d.style.top = y_click_modify - stone_diameter / 2 + "px";
-            d.style.width = stone_diameter + "px";
-            d.style.height = stone_diameter + "px";
-            d.style.borderRadius = stone_diameter / 2 + "px";
-            d.style.border = "1px solid black";
-            d.style.background = "#000";
+            if (stone_set.has(x_click_modify + "," + y_click_modify)) {
+                // check whether there exist a stone
+                return;
+            }
+            stone_set.add(x_click_modify + "," + y_click_modify);
+            var stone_row = Math.floor(y_click_modify / cell_width) - 1;
+            var stone_col = Math.floor(x_click_modify / cell_width) - 1;
+            board_array[stone_row][stone_col] = (stone_color == "black") ? "1" : "2";
+            var stone_diameter = cell_width * 0.8; // stones fill only 80% of each cell
+            var board = document.getElementById("board_canvas").getContext("2d");
+            board.beginPath();
+            board.arc(x_click_modify, y_click_modify, stone_diameter / 2, 0, 2 * Math.PI);
+            board.stroke();
+            board.fillStyle = stone_color;
+            board.fill();
+            var next_best_move;
+            if (num_player == 2) {
+                stone_color = ((stone_color == "black") ? "white" : "black");
+            }
+            else {
+                // talk to python code and get the next move
+                var board_dict = { "board": board_array, "last_point": [stone_row, stone_col], "last_stone_color": stone_color };
+                var board_json = JSON.stringify(board_dict);
+                console.log(board_json);
+                $.ajax({
+                    type: 'POST',
+                    url: "get-next-move",
+                    data: board_json,
+                    success: function (data) {
+                        next_best_move = jQuery.parseJSON(data);
+                        console.log(next_best_move);
+                    },
+                    async: false
+                });
+                x_best_move = (next_best_move[1] + 1) * cell_width;
+                y_best_move = (next_best_move[0] + 1) * cell_width;
+                board.beginPath();
+                board.arc(x_best_move, y_best_move, stone_diameter / 2, 0, 2 * Math.PI);
+                board.stroke();
+                board.fillStyle = ((stone_color == "black") ? "white" : "black");
+                board.fill();
+            }
+
         }
     </script>
 </body>
