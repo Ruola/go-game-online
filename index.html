@@ -7,6 +7,18 @@
     <link rel="icon" href="img/sun.webp">
     <title>Online Go Game</title>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+    <style>
+        #go_board_div {
+            position: relative;
+        }
+
+        .canvas_style {
+            position: absolute;
+            top: 0px;
+            left: 0px;
+            background-color: transparent;
+        }
+    </style>
 </head>
 
 <body>
@@ -14,6 +26,7 @@
     <label for="size">Choose a board size:</label>
     <select id="size" name="size_board">
         <option value="5">5</option>
+        <option value="9">9</option>
         <option value="13">13</option>
         <option value="19">19</option>
     </select>
@@ -23,7 +36,11 @@
         <option value="1">1 Player</option>
     </select>
     <button type="button" onclick="draw_board()">Start!</button>
-    <canvas id="board_canvas" width="500" , height="500" style="border:1px solid" onclick="showCoords(event)"></canvas>
+    <p id="player_record">Black Turn!</p>
+    <div id="go_board_div" width="500" height="500" onclick="showCoords(event)">
+        <canvas id="board_canvas" class="canvas_style" width="500" height="500" z-index=-1 style="border:1px solid">
+        </canvas>
+    </div>
     <script>
         var canvas_width = document.getElementById("board_canvas").width;
         var cell_width;
@@ -35,6 +52,13 @@
             board_size = parseInt(document.getElementById("size").value);
             num_player = parseInt(document.getElementById("type").value);
             cell_width = Math.floor(canvas_width / (board_size + 1));
+            // draw canvas for all stones
+            for (var i = 0; i < board_size; i++) {
+                for (var j = 0; j < board_size; j++) {
+                    var stone_canvas_id = "coor" + i + "_" + j;
+                    document.getElementById("go_board_div").innerHTML += `<canvas id="${stone_canvas_id}" class="canvas_style" width="500" height="500" z-index=1></canvas>`;
+                }
+            }
             var board = document.getElementById("board_canvas").getContext("2d");
             for (var i = 0; i < board_size - 1; i++) {   // it has (board_size - 1) cells
                 for (var j = 0; j < board_size - 1; j++) {
@@ -42,22 +66,43 @@
                     var y = (1 + j) * cell_width;
                     board.beginPath();
                     board.lineWidth = "1";
-                    board.strokeStyle = "black";
+                    board.strokeStyle = "Black";
                     board.rect(x, y, cell_width, cell_width);
                     board.stroke();
+                    board.closePath();
                 }
             }
             // pre-process
-            board_top_left_position = $("canvas").position();
+            board_top_left_position = $("div").position();
             for (var i = 0; i < board_size; i++) {
                 board_array[i] = new Array(board_size).fill("0");
             }
         }
-    </script>
-    <script>
+
         var stone_set = new Set();
-        var stone_color = "black";
+        var stone_color = "Black";
         function showCoords(event) {
+            function capture_stones(board_array, stone_color) {
+                var list_del_stones;
+                $.ajax({
+                    type: 'POST',
+                    url: "capture-stones",
+                    data: JSON.stringify({ "board": board_array, "stone_color": stone_color }),
+                    success: function (data) {
+                        list_del_stones = jQuery.parseJSON(data); // list of deleted stones
+                    },
+                    async: false
+                });
+                for (var i = 0; i < list_del_stones.length; i++) {
+                    var del_stone_position = list_del_stones[i];
+                    board_array[del_stone_position[0]][del_stone_position[1]] = 0;
+                    x_arc = (del_stone_position[1] + 1) * cell_width;
+                    y_arc = (del_stone_position[0] + 1) * cell_width;
+                    stone_set.delete(x_arc + "," + y_arc);
+                    var stone_canvas = document.getElementById("coor" + del_stone_position[0] + "_" + del_stone_position[1]).getContext("2d");
+                    stone_canvas.clearRect(0, 0, canvas_width, canvas_width);
+                }
+            }
             var x_click = event.clientX - board_top_left_position.left;
             var y_click = event.clientY - board_top_left_position.top;
             // in order to modify the position of stone into the exact cross
@@ -93,42 +138,53 @@
             stone_set.add(x_click_modify + "," + y_click_modify);
             var stone_row = Math.floor(y_click_modify / cell_width) - 1;
             var stone_col = Math.floor(x_click_modify / cell_width) - 1;
-            board_array[stone_row][stone_col] = (stone_color == "black") ? "1" : "2";
+            board_array[stone_row][stone_col] = (stone_color == "Black") ? 1 : 2;
             var stone_diameter = cell_width * 0.8; // stones fill only 80% of each cell
-            var board = document.getElementById("board_canvas").getContext("2d");
+            var stone_canvas_id = "coor" + stone_row + "_" + stone_col;
+            var board = document.getElementById(stone_canvas_id).getContext("2d");
             board.beginPath();
             board.arc(x_click_modify, y_click_modify, stone_diameter / 2, 0, 2 * Math.PI);
             board.stroke();
             board.fillStyle = stone_color;
             board.fill();
+            capture_stones(board_array, stone_color);
+            board.closePath();
             var next_best_move;
             if (num_player == 2) {
-                stone_color = ((stone_color == "black") ? "white" : "black");
+                // change stone_color
+                stone_color = ((stone_color == "Black") ? "White" : "Black");
+                document.getElementById("player_record").innerHTML = stone_color + " Turn!";
             }
             else {
                 // talk to python code and get the next move
                 var board_dict = { "board": board_array, "last_point": [stone_row, stone_col], "last_stone_color": stone_color };
-                var board_json = JSON.stringify(board_dict);
-                console.log(board_json);
                 $.ajax({
                     type: 'POST',
                     url: "get-next-move",
-                    data: board_json,
+                    data: JSON.stringify(board_dict),
                     success: function (data) {
                         next_best_move = jQuery.parseJSON(data);
-                        console.log(next_best_move);
                     },
                     async: false
                 });
+                if (next_best_move == null) {
+                    return;
+                }
                 x_best_move = (next_best_move[1] + 1) * cell_width;
                 y_best_move = (next_best_move[0] + 1) * cell_width;
+                board_array[next_best_move[0]][next_best_move[1]] = (stone_color == "Black") ? 2 : 1;
+                stone_set.add(x_best_move + "," + y_best_move);
+                var stone_canvas_id = "coor" + next_best_move[0] + "_" + next_best_move[1];
+                var board = document.getElementById(stone_canvas_id).getContext("2d");
                 board.beginPath();
                 board.arc(x_best_move, y_best_move, stone_diameter / 2, 0, 2 * Math.PI);
                 board.stroke();
-                board.fillStyle = ((stone_color == "black") ? "white" : "black");
+                board.fillStyle = ((stone_color == "Black") ? "White" : "Black");
                 board.fill();
+                capture_stones(board_array, ((stone_color == "Black") ? "White" : "Black"));
+                board.closePath();
+                document.getElementById("player_record").innerHTML = stone_color + " Turn!";
             }
-
         }
     </script>
 </body>

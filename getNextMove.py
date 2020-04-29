@@ -143,6 +143,22 @@ class MinimaxPlayer():
     def get_best_move(self, opponent_board: Board) -> Optional[Tuple[int, int]]:
         # return the best movement
         self.STONE = 1 if opponent_board.stone == 2 else 2
+        board_size = opponent_board.board_size
+        if board_size < 10:
+            KOMI = 3.75
+        elif board_size > 10:
+            KOMI = 7.5
+        if board_size != 5:
+            self.STONE_PRIORITY = []
+            for i in range(1, board_size - 1):
+                for j in range(1, board_size - 1):
+                    self.STONE_PRIORITY.append((i, j))
+            for i in range(board_size):
+                self.STONE_PRIORITY.append((0, i))
+                self.STONE_PRIORITY.append((board_size-1, i))
+                self.STONE_PRIORITY.append((i, 0))
+                self.STONE_PRIORITY.append((i, board_size-1))
+                
         # modify stone_priority
         # if opponent has points with liberty 2, then check whether my stone can reduce the liberty with max score
         my_stone_priority = copy.copy(self.STONE_PRIORITY)
@@ -151,13 +167,13 @@ class MinimaxPlayer():
         for x in zip(l1, l2):
             for next_move in [(1, 0), (-1, 0), (0, 1), (0, -1)]:
                 next = next_move[0] + x[0], next_move[1] + x[1]
-                if next[0] < 0 or next[0] >= opponent_board.board_size or next[
-                        1] < 0 or next[1] >= opponent_board.board_size:
+                if next[0] < 0 or next[0] >= board_size or next[
+                        1] < 0 or next[1] >= board_size:
                     continue
                 if next in visited:
                     continue
                 visited.add(next)
-                if opponent_board.board[next[0] * opponent_board.board_size +
+                if opponent_board.board[next[0] * board_size +
                                         next[1]] == "0":
                     # check the score
                     my_stone_priority.pop(my_stone_priority.index(next))
@@ -169,15 +185,8 @@ class MinimaxPlayer():
 
         max_point = None
         max_board = None
-        if num_zeros == 25:  # first stone
+        if num_zeros == board_size * board_size:  # first stone
             max_point = (2, 2)
-        elif num_zeros >= 21 and self.STONE == 1:
-            for point in [(2, 2), (2, 3), (3, 2), (2, 1), (1, 2)]:
-                if opponent_board.board[point[0] * opponent_board.board_size +
-                                        point[1]] == "0":
-                    max_board = opponent_board.add_stone(point[0], point[1])
-                    max_point = point
-                    break
         else:
             max_board = self._make_decision(opponent_board)
             if max_board is not None:
@@ -214,7 +223,7 @@ if __name__ == "main":
                 break
 
     player = MinimaxPlayer()
-    max_point = player.get_best_move(opponent_board, STONE)
+    max_point = player.get_best_move(opponent_board)
     with open("output.txt", "w") as f:
         if max_point is None:
             f.write("PASS")
